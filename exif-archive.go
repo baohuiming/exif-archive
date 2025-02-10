@@ -143,6 +143,7 @@ func main() {
 	}
 	for _, file := range files {
 		fileName := file.Name()
+		currentFile := filepath.Join(*originPath, fileName)
 		if file.IsDir() {
 			// 判断是否为文件夹
 			continue
@@ -154,12 +155,12 @@ func main() {
 			fileTime := fileTimes{}
 
 			// 读取文件创建日期
-			t, err := times.Stat(filepath.Join(*originPath, fileName))
+			t, err := times.Stat(currentFile)
 			if err == nil && t.HasBirthTime() {
 				fileTime.BirthTime = t.BirthTime()
 			}
 			// 读取exif拍摄日期
-			exifTime, err := readExifTime(filepath.Join(*originPath, fileName))
+			exifTime, err := readExifTime(currentFile)
 			if err == nil {
 				fileTime.ExifTime = exifTime
 			}
@@ -192,13 +193,26 @@ func main() {
 			// 移动文件
 			targetFile := filepath.Join(targetDir, fileName)
 			if _, err := os.Stat(targetFile); err == nil {
-				log.Printf("【注意】%s 文件已存在\n", targetFile)
-			} else {
-				err := os.Rename(filepath.Join(*originPath, fileName), targetFile)
+				// 比较两个文件
+				same, err := CompareFiles(currentFile, targetFile)
 				if err != nil {
-					log.Fatalf("【错误】移动文件失败 %s -> %s\n", filepath.Join(*originPath, fileName), targetFile)
+					log.Fatalf("【错误】比较文件失败 %s -> %s\n", currentFile, targetFile)
 				}
-				log.Printf("移动文件 %s -> %s\n", filepath.Join(*originPath, fileName), targetFile)
+				if same {
+					log.Printf("【注意】%s 文件已存在且内容相同，删除文件\n", targetFile)
+					err := os.Remove(currentFile)
+					if err != nil {
+						log.Fatalf("【错误】删除文件失败 %s\n", currentFile)
+					}
+				} else {
+					log.Fatalf("【错误】%s 文件已存在且内容不同\n", targetFile)
+				}
+			} else {
+				err := os.Rename(currentFile, targetFile)
+				if err != nil {
+					log.Fatalf("【错误】移动文件失败 %s -> %s\n", currentFile, targetFile)
+				}
+				log.Printf("移动文件 %s -> %s\n", currentFile, targetFile)
 			}
 		}
 	}
